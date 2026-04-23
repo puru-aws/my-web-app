@@ -67,24 +67,12 @@ jobs:
             --query "Stacks[0].Outputs" \
             --output json)
 
-          extract() {
-            echo "$stack_outputs" | python3 -c "
-          import sys, json
-          outputs = json.load(sys.stdin)
-          for o in outputs:
-              if o['OutputKey'] == '$1':
-                  print(o['OutputValue'])
-                  sys.exit(0)
-          sys.exit(1)
-          "
-          }
+          BUCKET_NAME=$(echo "$stack_outputs" | python3 -c "import sys,json;[print(o['OutputValue']) or sys.exit(0) for o in json.load(sys.stdin) if o['OutputKey']=='BucketName'];sys.exit(1)")
+          WEBSITE_URL=$(echo "$stack_outputs" | python3 -c "import sys,json;[print(o['OutputValue']) or sys.exit(0) for o in json.load(sys.stdin) if o['OutputKey']=='WebsiteURL'];sys.exit(1)")
+          DISTRIBUTION_ID=$(echo "$stack_outputs" | python3 -c "import sys,json;[print(o['OutputValue']) or sys.exit(0) for o in json.load(sys.stdin) if o['OutputKey']=='DistributionId'];sys.exit(1)")
 
-          BUCKET_NAME=$(extract BucketName)
-          WEBSITE_URL=$(extract WebsiteURL)
-          DISTRIBUTION_ID=$(extract DistributionId)
-
-          echo "bucket-name=${BUCKET_NAME}"       >> "$GITHUB_OUTPUT"
-          echo "website-url=${WEBSITE_URL}"        >> "$GITHUB_OUTPUT"
+          echo "bucket-name=${BUCKET_NAME}" >> "$GITHUB_OUTPUT"
+          echo "website-url=${WEBSITE_URL}" >> "$GITHUB_OUTPUT"
           echo "distribution-id=${DISTRIBUTION_ID}" >> "$GITHUB_OUTPUT"
 
           echo "Bucket: ${BUCKET_NAME}"
