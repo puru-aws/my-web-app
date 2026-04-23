@@ -1,0 +1,34 @@
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Kiro
+.kiro/
+
+# Scripts (deployment tooling)
+scripts/
+images/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node (if added later)
+node_modules/
+npm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+
+# Build artifacts
+dist/
+build/
+*.zip

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Static Web App</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header role="banner">
+        <h1>S3 Static Web App</h1>
+        <nav aria-label="Main navigation">
+            <button class="nav-toggle" aria-expanded="false" aria-controls="nav-menu">
+                Menu
+            </button>
+            <ul id="nav-menu" role="list">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main role="main">
+        <section id="home" aria-labelledby="home-heading">
+            <h2 id="home-heading">Welcome</h2>
+            <p>Welcome to our static web application hosted on AWS S3. This site demonstrates a clean, accessible, and responsive design built with plain HTML, CSS, and JavaScript.</p>
+        </section>
+        <section id="about" aria-labelledby="about-heading">
+            <h2 id="about-heading">About</h2>
+            <p>This application is a self-contained static website designed for deployment on AWS S3 static website hosting. It requires no server-side processing and runs entirely in the browser.</p>
+        </section>
+        <section id="features" aria-labelledby="features-heading">
+            <h2 id="features-heading">Features</h2>
+            <ul>
+                <li>Responsive design that works on desktop and mobile</li>
+                <li>Smooth scroll navigation between sections</li>
+                <li>Accessible markup following WCAG 2.1 AA standards</li>
+                <li>Custom error page for a polished user experience</li>
+                <li>Lightweight and fast loading with no external dependencies</li>
+            </ul>
+        </section>
+        <section id="contact" aria-labelledby="contact-heading">
+            <h2 id="contact-heading">Contact</h2>
+            <p>Have questions or feedback? Reach out to us and we will get back to you as soon as possible.</p>
+        </section>
+    </main>
+    <footer role="contentinfo">
+        <p>&copy; 2025 S3 Static Web App. All rights reserved.</p>
+    </footer>
+    <script src="js/main.js" defer></script>
+</body>
+</html>
