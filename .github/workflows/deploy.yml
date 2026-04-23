@@ -34,116 +34,124 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Validate prerequisites
+        shell: bash
         run: |
           set -euo pipefail
-          [[ -f infrastructure/template.yaml ]] || { echo "Error: infrastructure/template.yaml not found" >&2; exit 1; }
-          [[ -f index.html ]]                   || { echo "Error: index.html not found" >&2; exit 1; }
-          [[ -f error.html ]]                   || { echo "Error: error.html not found" >&2; exit 1; }
+          test -f infrastructure/template.yaml || { echo "Error: infrastructure/template.yaml not found" >&2; exit 1; }
+          test -f index.html || { echo "Error: index.html not found" >&2; exit 1; }
+          test -f error.html || { echo "Error: error.html not found" >&2; exit 1; }
 
       - name: Deploy CloudFormation stack
+        shell: bash
         run: |
           set -euo pipefail
           echo "Deploying stack '${STACK_NAME}' to '${AWS_REGION}'..."
-          deploy_output=$(aws cloudformation deploy \
+          if ! aws cloudformation deploy \
             --template-file infrastructure/template.yaml \
             --stack-name "${STACK_NAME}" \
-            --region "${AWS_REGION}" 2>&1) || {
-            if echo "$deploy_output" | grep -q "No changes to deploy"; then
+            --region "${AWS_REGION}" 2>&1 | tee /tmp/deploy_output.txt; then
+            if grep -q "No changes to deploy" /tmp/deploy_output.txt; then
               echo "No infrastructure changes detected."
             else
-              echo "Error: Stack deployment failed:" >&2
-              echo "$deploy_output" >&2
+              echo "Error: Stack deployment failed" >&2
               exit 1
             fi
-          }
+          fi
 
       - name: Retrieve stack outputs
         id: outputs
+        shell: bash
         run: |
           set -euo pipefail
-          stack_outputs=$(aws cloudformation describe-stacks \
+
+          BUCKET_NAME=$(aws cloudformation describe-stacks \
             --stack-name "${STACK_NAME}" \
             --region "${AWS_REGION}" \
-            --query "Stacks[0].Outputs" \
-            --output json)
+            --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
+            --output text)
 
-          BUCKET_NAME=$(echo "$stack_outputs" | python3 -c "import sys,json;[print(o['OutputValue']) or sys.exit(0) for o in json.load(sys.stdin) if o['OutputKey']=='BucketName'];sys.exit(1)")
-          WEBSITE_URL=$(echo "$stack_outputs" | python3 -c "import sys,json;[print(o['OutputValue']) or sys.exit(0) for o in json.load(sys.stdin) if o['OutputKey']=='WebsiteURL'];sys.exit(1)")
-          DISTRIBUTION_ID=$(echo "$stack_outputs" | python3 -c "import sys,json;[print(o['OutputValue']) or sys.exit(0) for o in json.load(sys.stdin) if o['OutputKey']=='DistributionId'];sys.exit(1)")
+          WEBSITE_URL=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_NAME}" \
+            --region "${AWS_REGION}" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" \
+            --output text)
 
-          echo "bucket-name=${BUCKET_NAME}" >> "$GITHUB_OUTPUT"
-          echo "website-url=${WEBSITE_URL}" >> "$GITHUB_OUTPUT"
-          echo "distribution-id=${DISTRIBUTION_ID}" >> "$GITHUB_OUTPUT"
+          DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_NAME}" \
+            --region "${AWS_REGION}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)
+
+          echo "bucket-name=${BUCKET_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "website-url=${WEBSITE_URL}" >> "${GITHUB_OUTPUT}"
+          echo "distribution-id=${DISTRIBUTION_ID}" >> "${GITHUB_OUTPUT}"
 
           echo "Bucket: ${BUCKET_NAME}"
           echo "URL: ${WEBSITE_URL}"
           echo "Distribution ID: ${DISTRIBUTION_ID}"
 
       - name: Upload files to S3
+        shell: bash
         env:
           BUCKET_NAME: ${{ steps.outputs.outputs.bucket-name }}
         run: |
           set -euo pipefail
           echo "Uploading files to S3..."
 
-          # HTML
           aws s3 cp index.html "s3://${BUCKET_NAME}/index.html" \
             --content-type "text/html" --region "${AWS_REGION}"
           aws s3 cp error.html "s3://${BUCKET_NAME}/error.html" \
             --content-type "text/html" --region "${AWS_REGION}"
 
-          # CSS
           aws s3 cp css/ "s3://${BUCKET_NAME}/css/" \
             --recursive --content-type "text/css" --region "${AWS_REGION}"
 
-          # JS
           aws s3 cp js/ "s3://${BUCKET_NAME}/js/" \
             --recursive --content-type "application/javascript" --region "${AWS_REGION}"
 
-          # Images (per-extension MIME type)
-          if [[ -d images ]]; then
+          if test -d images; then
             for file in images/*; do
-              [[ -f "$file" ]] || continue
-              filename=$(basename "$file")
-              [[ "$filename" == ".gitkeep" ]] && continue
+              test -f "${file}" || continue
+              filename=$(basename "${file}")
+              test "${filename}" = ".gitkeep" && continue
 
               extension="${filename##*.}"
-              extension=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+              extension=$(echo "${extension}" | tr '[:upper:]' '[:lower:]')
 
-              case "$extension" in
-                png)       content_type="image/png" ;;
-                jpg|jpeg)  content_type="image/jpeg" ;;
-                gif)       content_type="image/gif" ;;
-                svg)       content_type="image/svg+xml" ;;
-                webp)      content_type="image/webp" ;;
-                ico)       content_type="image/x-icon" ;;
-                *)
-                  echo "Warning: Unknown image type for ${filename}, skipping." >&2
-                  continue
-                  ;;
+              case "${extension}" in
+                png)      content_type="image/png" ;;
+                jpg|jpeg) content_type="image/jpeg" ;;
+                gif)      content_type="image/gif" ;;
+                svg)      content_type="image/svg+xml" ;;
+                webp)     content_type="image/webp" ;;
+                ico)      content_type="image/x-icon" ;;
+                *)        echo "Warning: Unknown image type for ${filename}, skipping." >&2; continue ;;
               esac
 
-              aws s3 cp "$file" "s3://${BUCKET_NAME}/images/${filename}" \
-                --content-type "$content_type" --region "${AWS_REGION}"
+              aws s3 cp "${file}" "s3://${BUCKET_NAME}/images/${filename}" \
+                --content-type "${content_type}" --region "${AWS_REGION}"
             done
           fi
 
           echo "File upload complete."
 
       - name: Invalidate CloudFront cache
+        shell: bash
         env:
           DISTRIBUTION_ID: ${{ steps.outputs.outputs.distribution-id }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           echo "Invalidating CloudFront cache..."
-          if ! aws cloudfront create-invalidation \
+          if aws cloudfront create-invalidation \
             --distribution-id "${DISTRIBUTION_ID}" \
             --paths "/*" \
-            --region "${AWS_REGION}" > /dev/null 2>&1; then
-            echo "Warning: Cache invalidation failed. Cached content will refresh when TTL expires." >&2
-          else
+            --region "${AWS_REGION}" > /dev/null; then
             echo "Cache invalidation created successfully."
+          else
+            echo "Warning: Cache invalidation failed. Cached content will refresh when TTL expires." >&2
           fi
 
       - name: Print website URL
-        run: echo "Deployment complete! Website URL: ${{ steps.outputs.outputs.website-url }}"
+        run: |
+          echo "Deployment complete!"
+          echo "Website URL: ${{ steps.outputs.outputs.website-url }}"
