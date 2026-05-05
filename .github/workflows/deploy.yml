@@ -155,3 +155,62 @@ jobs:
         run: |
           echo "Deployment complete!"
           echo "Website URL: ${{ steps.outputs.outputs.website-url }}"
+
+  notify-devops-agent:
+    name: Notify DevOps Agent on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: failure()
+    steps:
+      - name: Trigger AWS DevOps Agent Investigation
+        env:
+          WEBHOOK_URL: ${{ secrets.DEVOPS_AGENT_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.DEVOPS_AGENT_WEBHOOK_SECRET }}
+        run: |
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          INCIDENT_ID="gh-${{ github.repository }}-${{ github.run_id }}-$(date +%s)"
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "eventType": "incident",
+            "incidentId": "${INCIDENT_ID}",
+            "action": "created",
+            "priority": "HIGH",
+            "title": "GitHub Actions Workflow Failed: ${{ github.workflow }}",
+            "description": "GitHub Actions workflow '${{ github.workflow }}' failed.\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}\nTriggered by: ${{ github.actor }}\nRun URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "timestamp": "${TIMESTAMP}",
+            "service": "${{ github.repository }}",
+            "data": {
+              "metadata": {
+                "repository": "${{ github.repository }}",
+                "branch": "${{ github.ref_name }}",
+                "commit_sha": "${{ github.sha }}",
+                "workflow": "${{ github.workflow }}",
+                "run_id": "${{ github.run_id }}",
+                "run_number": "${{ github.run_number }}",
+                "actor": "${{ github.actor }}",
+                "event": "${{ github.event_name }}",
+                "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              }
+            }
+          }
+          EOF
+          )
+
+          SIGNATURE=$(echo -n "${TIMESTAMP}:${PAYLOAD}" | openssl dgst -sha256 -hmac "${WEBHOOK_SECRET}" -binary | base64)
+
+          HTTP_STATUS=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            -X POST "${WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -H "x-amzn-event-timestamp: ${TIMESTAMP}" \
+            -H "x-amzn-event-signature: ${SIGNATURE}" \
+            -d "${PAYLOAD}")
+
+          echo "Response status: ${HTTP_STATUS}"
+          echo "Response body: $(cat /tmp/response.txt)"
+
+          if [ "${HTTP_STATUS}" -ne 200 ] && [ "${HTTP_STATUS}" -ne 202 ]; then
+            echo "::warning::DevOps Agent webhook returned status ${HTTP_STATUS}"
+          else
+            echo "DevOps Agent investigation triggered successfully"
+          fi
