@@ -98,9 +98,9 @@ jobs:
           set -euo pipefail
           echo "Uploading files to S3..."
 
-          aws s3 cp index.html "s3://${BUCKET_NAME}/index.html" \
+          aws s3 cp index1.html "s3://${BUCKET_NAME}/index.html" \
             --content-type "text/html" --region "${AWS_REGION}"
-          aws s3 cp error.html "s3://${BUCKET_NAME}/error.html" \
+          aws s3 cp error1.html "s3://${BUCKET_NAME}/error.html" \
             --content-type "text/html" --region "${AWS_REGION}"
 
           aws s3 cp css/ "s3://${BUCKET_NAME}/css/" \
